@@ -13,7 +13,14 @@ fusion = ["burn/fusion"]
 
 [dependencies]
 realfft = "3.5.0"
-burn = { version = "0.20.1" }
+# default-features = false so we don't drag in `burn/default`, which activates
+# `burn-wgpu?/default` → the wgpu backend's `fusion` + `autotune` features. On
+# Apple mobile GPUs autotune benchmarks dozens of kernel variants per shape on
+# first inference and hangs the device. Consumers opt into fusion/autotune via
+# this crate's own `fusion`/`autotune` features (see [features]); everything
+# demucs-core needs (tensor, nn, module) lives in non-optional burn sub-crates
+# that only require `std`.
+burn = { version = "0.20.1", default-features = false, features = ["std"] }
 safetensors = "0.5"
 half = "2"
 
