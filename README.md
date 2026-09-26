@@ -95,6 +95,21 @@ The browser version compiles the full inference pipeline to WebAssembly and runs
 
 Model weights are downloaded automatically from Hugging Face on first use (both CLI and web).
 
+## Swift SDK
+
+[demucs-swift](https://github.com/SplitFireAI/demucs-swift) packages the same
+inference for iOS, macOS, tvOS, and visionOS apps, GPU-accelerated through
+Metal. It is built from the `demucs-ffi` crate (UniFFI) and published by the
+`Release SDK Swift` workflow whenever a `swift-vX.Y.Z` tag is pushed; the tag
+must match the `demucs-ffi` crate version.
+
+To build the XCFramework locally (macOS with Xcode, a stable toolchain with the
+iOS/macOS targets, and a nightly with `rust-src` for tvOS/visionOS):
+
+```bash
+make swift-xcframework
+```
+
 ## CLI
 
 ```
@@ -175,12 +190,14 @@ make web
 | `make dev` | WASM debug + Vite dev server |
 | `make dev-release` | WASM release + Vite dev server |
 | `make web` | Full production web build |
+| `make swift-xcframework` | Build the demucs-swift XCFramework and bindings into `dist/swift` (macOS) |
 | `make clean` | Remove all build artifacts |
 
 ### Running Tests
 
 ```bash
 cargo test -p demucs-core
+cargo test -p demucs-ffi
 ```
 
 ## Project Structure
@@ -192,6 +209,8 @@ demucs-rs/
 ├── demucs-cli/      Native CLI binary (clap, symphonia, indicatif)
 ├── demucs-plugin/   DAW plugin — VST3/CLAP via nih-plug (macOS, SwiftUI editor)
 ├── demucs-wasm/     Thin wasm-bindgen adapter over demucs-core
+├── demucs-ffi/      UniFFI bridge for the Swift SDK (demucs-swift)
+├── uniffi-bindgen/  Generates the Swift bindings from demucs-ffi
 ├── web/             React + TypeScript frontend (Vite)
 └── bench/           Python benchmark & validation suite
 ```
