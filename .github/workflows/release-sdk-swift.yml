@@ -119,6 +119,9 @@ jobs:
           # private repository would need it to clone as well.
           token: ${{ secrets.DEMUCS_SWIFT_PAT || github.token }}
           path: demucs-swift
+          # Full history and tags: the push step rebases onto main, and the
+          # commit step compares against an existing release tag.
+          fetch-depth: 0
       # Gate the release on the Swift package building and passing its tests
       # against the framework just built. Package.swift prefers a local
       # DemucsFramework.xcframework over the release URL when one is present,
@@ -140,6 +143,44 @@ jobs:
             demucs-rs/dist/swift/DemucsFramework.checksum.txt
             demucs-rs/dist/swift/version.txt
             demucs-rs/dist/swift/Package/Sources/Demucs/demucs_ffi.swift
+      - name: Update Swift package
+        if: startsWith(github.ref, 'refs/tags/') || inputs.publish
+        env:
+          CHECKSUM: ${{ steps.meta.outputs.checksum }}
+          RELEASE_URL: https://github.com/${{ github.repository }}/releases/download/${{ steps.release.outputs.release_tag }}/DemucsFramework.xcframework.zip
+        run: |
+          python3 - <<'PY'
+          import os, pathlib, re
+          package = pathlib.Path("demucs-swift/Package.swift")
+          source = package.read_text()
+          source, urls = re.subn(r'(let releaseFrameworkURL =\s*")([^"]+)(")', rf'\g<1>{os.environ["RELEASE_URL"]}\g<3>', source, count=1)
+          source, sums = re.subn(r'(let releaseFrameworkChecksum =\s*")([^"]+)(")', rf'\g<1>{os.environ["CHECKSUM"]}\g<3>', source, count=1)
+          if (urls, sums) != (1, 1):
+              raise RuntimeError("Package.swift release constants were not found")
+          package.write_text(source)
+          PY
+      # Commit locally before the GitHub release exists, so a conflicting tag
+      # stops the run while nothing has been published yet.
+      - name: Commit Swift package
+        if: startsWith(github.ref, 'refs/tags/') || inputs.publish
+        working-directory: demucs-swift
+        env:
+          # SwiftPM resolves `from: "0.1.0"` against plain semver tags, so
+          # demucs-swift is tagged X.Y.Z rather than swift-vX.Y.Z.
+          VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Package.swift Sources/Demucs/demucs_ffi.swift
+          git diff --cached --quiet || git commit -m "Release $VERSION"
+          # A rerun of the same release finds its own tag, which is fine. A tag
+          # pinning a different framework would leave SwiftPM users on it.
+          if git rev-parse --verify --quiet "refs/tags/$VERSION^{commit}" > /dev/null; then
+            if ! git diff --quiet "refs/tags/$VERSION" HEAD -- Package.swift Sources/Demucs/demucs_ffi.swift; then
+              echo "::error::Tag $VERSION already exists on demucs-swift with a different Package.swift or bindings."
+              exit 1
+            fi
+          fi
       - name: Create GitHub release
         if: startsWith(github.ref, 'refs/tags/') || inputs.publish
         uses: softprops/action-gh-release@v3
@@ -152,37 +193,19 @@ jobs:
           files: |
             demucs-rs/dist/swift/DemucsFramework.xcframework.zip
             demucs-rs/dist/swift/DemucsFramework.checksum.txt
-      - name: Update Swift package
-        if: startsWith(github.ref, 'refs/tags/') || inputs.publish
-        env:
-          CHECKSUM: ${{ steps.meta.outputs.checksum }}
-          RELEASE_URL: https://github.com/${{ github.repository }}/releases/download/${{ steps.release.outputs.release_tag }}/DemucsFramework.xcframework.zip
-        run: |
-          python3 - <<'PY'
-          import os, pathlib, re
-          package = pathlib.Path("demucs-swift/Package.swift")
-          source = package.read_text()
-          source, urls = re.subn(r'(let releaseFrameworkURL =\s*\n\s*")([^"]+)(")', rf'\g<1>{os.environ["RELEASE_URL"]}\g<3>', source, count=1)
-          source, sums = re.subn(r'(let releaseFrameworkChecksum =\s*\n\s*")([^"]+)(")', rf'\g<1>{os.environ["CHECKSUM"]}\g<3>', source, count=1)
-          if (urls, sums) != (1, 1):
-              raise RuntimeError("Package.swift release constants were not found")
-          package.write_text(source)
-          PY
-      - name: Commit and tag Swift package
+      - name: Push and tag Swift package
         if: startsWith(github.ref, 'refs/tags/') || inputs.publish
         working-directory: demucs-swift
         env:
-          # SwiftPM resolves `from: "0.1.0"` against plain semver tags, so
-          # demucs-swift is tagged X.Y.Z rather than swift-vX.Y.Z.
           VERSION: ${{ steps.meta.outputs.version }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Package.swift Sources/Demucs/demucs_ffi.swift
-          git diff --cached --quiet || git commit -m "Release $VERSION"
+          # main may have moved while the Swift tests ran. If this fails, the
+          # release above is already up; rerunning the job replaces its assets
+          # and retries the push.
+          git pull --rebase origin main
           git push origin HEAD:main
-          if git ls-remote --tags origin "refs/tags/$VERSION" | grep -q "refs/tags/$VERSION"; then
-            echo "::warning::Tag $VERSION already exists; leaving it unchanged."
+          if git rev-parse --verify --quiet "refs/tags/$VERSION^{commit}" > /dev/null; then
+            echo "Tag $VERSION already exists with the same release files."
           else
             git tag -a "$VERSION" -m "Release $VERSION"
             git push origin "$VERSION"
