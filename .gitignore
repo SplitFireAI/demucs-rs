@@ -13,3 +13,6 @@ demucs-plugin/ui-macos/.build/
 
 # IDE / tools
 .playwright-mcp/
+
+# Swift SDK build output (.github/scripts/build-swift-xcframework.sh)
+dist/
