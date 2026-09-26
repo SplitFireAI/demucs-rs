@@ -1,0 +1,14 @@
+[package]
+name = "demucs-uniffi-bindgen"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "uniffi-bindgen.rs"
+
+[dependencies]
+# Must match the uniffi version in demucs-ffi exactly: the bindgen reads
+# metadata the scaffolding embeds in the staticlib.
+uniffi = { version = "=0.31.0", features = ["cli"] }
