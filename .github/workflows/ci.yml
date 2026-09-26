@@ -28,6 +28,16 @@ jobs:
       - name: Clippy (demucs-core)
         run: cargo clippy -p demucs-core -- -D warnings
 
+      # demucs-core is consumed as a library with burn's default features off.
+      # `cargo test` cannot catch breakage there because demucs-core's own
+      # dev-dependency on burn re-enables them; `-p` excludes dev-dependencies,
+      # so these steps check what a downstream consumer actually compiles.
+      - name: Check demucs-core in downstream (defaults-off) configs
+        run: |
+          cargo check -p demucs-core
+          cargo check -p demucs-core --features ndarray
+          cargo check -p demucs-core --features wgpu
+
       - name: Clippy (demucs-cli, cpu backend)
         run: cargo clippy -p demucs-cli --features cpu -- -D warnings
 

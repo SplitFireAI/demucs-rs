@@ -5,7 +5,14 @@ edition = "2021"
 
 [features]
 default = []
-ndarray = ["burn/ndarray"]
+# `burn/simd` is listed explicitly: burn depends on burn-ndarray with
+# default-features = false, so burn-ndarray's own defaults (`std`, `simd`,
+# `multi-threads`) are only restored by `burn/default` — which we turn off
+# below. Without this, `demucs-core/ndarray` silently drops SIMD kernels.
+# `std` still arrives via `burn/std`. Note `multi-threads` (rayon) has no
+# passthrough on the burn facade and is NOT recoverable here; a consumer that
+# needs it must depend on burn-ndarray directly.
+ndarray = ["burn/ndarray", "burn/simd"]
 wgpu = ["burn/wgpu"]
 cuda = ["burn/cuda"]
 autotune = ["burn/autotune"]
@@ -28,6 +35,12 @@ half = "2"
 dirs = "5"
 
 [dev-dependencies]
+# Deliberately keeps burn's default features (unlike the [dependencies] entry
+# above) so the test build gets burn-ndarray's `multi-threads`; without rayon
+# the suite runs ~3x slower. This does mean the test build re-enables
+# `burn/default` crate-wide and cannot catch breakage in the defaults-off
+# config that real consumers get — the `cargo check -p demucs-core` steps in
+# the CI lint job cover that, since `-p` excludes dev-dependencies.
 burn = { version = "0.20.1", features = ["ndarray"] }
 safetensors = "0.5"
 pollster = "0.4"
