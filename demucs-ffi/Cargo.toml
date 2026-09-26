@@ -23,7 +23,11 @@ futures-channel = "0.3"
 ureq = { version = "2", default-features = false, features = ["native-tls", "gzip"] }
 dirs = "5"
 
-[target.'cfg(target_vendor = "apple")'.dependencies]
+# burn's `metal` feature turns on cubecl-wgpu's MSL codegen, which cubecl-wgpu
+# 0.9 only implements for macOS; on iOS, tvOS and visionOS it leaves
+# `request_device` undefined. Those targets still run on Metal, through wgpu's
+# WGSL path.
+[target.'cfg(target_os = "macos")'.dependencies]
 burn = { version = "0.20.1", default-features = false, features = ["metal"] }
 
 [build-dependencies]
