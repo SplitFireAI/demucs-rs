@@ -1,4 +1,4 @@
-.PHONY: cli plugin wasm wasm-release web dev dev-release clean test-plugin test-plugin-e2e test-web-e2e test-web-smoke
+.PHONY: cli plugin swift-xcframework wasm wasm-release web dev dev-release clean test-plugin test-plugin-e2e test-web-e2e test-web-smoke
 
 # Build native CLI (release, auto-detects GPU backend via target-conditional deps)
 cli:
@@ -7,6 +7,10 @@ cli:
 # Build and bundle DAW plugin (VST3 + CLAP)
 plugin:
 	cargo xtask bundle demucs-plugin --release
+
+# Build the demucs-swift XCFramework + Swift bindings into dist/swift (macOS only)
+swift-xcframework:
+	.github/scripts/build-swift-xcframework.sh
 
 # Build WASM (debug — fast compile, slow runtime)
 wasm:
