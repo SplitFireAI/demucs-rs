@@ -14,11 +14,11 @@ use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock, RwLock};
 use std::thread;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use burn::backend::wgpu::{graphics::AutoGraphicsApi, init_setup, RuntimeOptions, WgpuDevice};
 use demucs_core::listener::{ForwardEvent, ForwardListener};
-use demucs_core::model::metadata::{self, ModelInfo, StemId, ALL_MODELS};
+use demucs_core::model::metadata::{self, ModelInfo, StemId};
 use demucs_core::provider::fs::FsProvider;
 use demucs_core::provider::ModelProvider;
 use demucs_core::{Demucs, DemucsError, ModelOptions, Stem, TRAINING_LENGTH};
@@ -28,6 +28,9 @@ type B = burn::backend::wgpu::Wgpu;
 /// The CLI needed an 8 MB main thread (demucs-rs#3); inference runs on its own
 /// worker threads here, so they get the same.
 const WORKER_STACK_SIZE: usize = 8 * 1024 * 1024;
+
+const DOWNLOAD_CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
+const DOWNLOAD_READ_TIMEOUT: Duration = Duration::from_secs(60);
 
 /// Sample rate the models were trained at. Input at any other rate is
 /// resampled by demucs-core on the way in and on the way out.
@@ -439,19 +442,24 @@ fn model_path(model: &FfiDemucsModel) -> Option<PathBuf> {
 
 #[uniffi::export]
 pub fn all_models() -> Vec<FfiModelMetadata> {
-    ALL_MODELS
-        .iter()
-        .map(|info| {
-            let model = match info.id {
-                metadata::HTDEMUCS_6S_ID => FfiDemucsModel::SixStem,
-                metadata::HTDEMUCS_FT_ID => FfiDemucsModel::FineTuned {
-                    stems: info.stems.iter().copied().map(Into::into).collect(),
-                },
-                _ => FfiDemucsModel::FourStem,
-            };
-            FfiModelMetadata::new(model)
-        })
-        .collect()
+    // Listed explicitly rather than derived from `ALL_MODELS` ids, so a model
+    // added to demucs-core without an `FfiDemucsModel` variant fails the
+    // `all_models_matches_core_metadata` test instead of being mislabelled.
+    [
+        FfiDemucsModel::FourStem,
+        FfiDemucsModel::SixStem,
+        FfiDemucsModel::FineTuned {
+            stems: metadata::HTDEMUCS_FT
+                .stems
+                .iter()
+                .copied()
+                .map(Into::into)
+                .collect(),
+        },
+    ]
+    .into_iter()
+    .map(FfiModelMetadata::new)
+    .collect()
 }
 
 #[uniffi::export]
@@ -503,8 +511,13 @@ fn download(info: &ModelInfo, listener: &dyn FfiDownloadListener) -> Result<(), 
     let download_error = |reason: String| FfiDemucsError::Download { reason };
     let url = metadata::download_url(info);
     let tls = ureq::native_tls::TlsConnector::new().map_err(|e| download_error(e.to_string()))?;
+    // No overall timeout: the fine-tuned weights are 333 MB. The connect and
+    // per-read timeouts turn a stalled connection into an error instead of a
+    // read that blocks forever, where the cancel callback can never run.
     let agent = ureq::AgentBuilder::new()
         .tls_connector(Arc::new(tls))
+        .timeout_connect(DOWNLOAD_CONNECT_TIMEOUT)
+        .timeout_read(DOWNLOAD_READ_TIMEOUT)
         .build();
     let response = agent
         .get(&url)
@@ -627,6 +640,7 @@ uniffi::setup_scaffolding!();
 #[cfg(test)]
 mod tests {
     use super::*;
+    use demucs_core::model::metadata::ALL_MODELS;
 
     #[test]
     fn fine_tuned_rejects_unsupported_and_empty_selections() {
