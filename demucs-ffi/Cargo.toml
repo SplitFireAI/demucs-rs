@@ -1,0 +1,30 @@
+[package]
+name = "demucs-ffi"
+version = "0.1.0"
+edition = "2021"
+description = "UniFFI bridge used to build the demucs-swift XCFramework."
+license = "Apache-2.0"
+publish = false
+
+[lib]
+name = "demucs_ffi"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[dependencies]
+# No `autotune`: on Apple mobile GPUs CubeCL autotune benchmarks dozens of
+# kernel variants per shape on first inference and hangs the device (see the
+# note on burn in demucs-core/Cargo.toml).
+demucs-core = { path = "../demucs-core", features = ["wgpu", "fusion"] }
+burn = { version = "0.20.1", default-features = false, features = ["std", "wgpu", "fusion"] }
+uniffi = "=0.31.0"
+thiserror = "2"
+pollster = "0.4"
+futures-channel = "0.3"
+ureq = { version = "2", default-features = false, features = ["native-tls", "gzip"] }
+dirs = "5"
+
+[target.'cfg(target_vendor = "apple")'.dependencies]
+burn = { version = "0.20.1", default-features = false, features = ["metal"] }
+
+[build-dependencies]
+cc = "1"
