@@ -9,6 +9,7 @@
 // fusion/wgpu type graph and overflows the default limit of 128.
 #![recursion_limit = "256"]
 
+use std::collections::HashMap;
 use std::fs;
 use std::io::{Read, Write};
 use std::path::PathBuf;
@@ -501,6 +502,11 @@ pub async fn download_model(
 }
 
 fn download(info: &ModelInfo, listener: &dyn FfiDownloadListener) -> Result<(), FfiDemucsError> {
+    // Two downloads of the same file would share one `.part` path and
+    // interleave their writes. The second caller waits here instead, then
+    // finds the weights already cached.
+    let file_lock = download_lock(info.filename);
+    let _downloading = lock(&file_lock);
     let dir = cache_dir()?;
     let target = dir.join(info.filename);
     if target.exists() {
@@ -629,6 +635,15 @@ where
     rx.await.map_err(|_| FfiDemucsError::Inference {
         reason: format!("{name} worker panicked"),
     })
+}
+
+/// One lock per weights file. The fine-tuned stem selections share a file, so
+/// this is keyed by filename rather than by model.
+fn download_lock(filename: &'static str) -> Arc<Mutex<()>> {
+    type Locks = Mutex<HashMap<&'static str, Arc<Mutex<()>>>>;
+    static LOCKS: OnceLock<Locks> = OnceLock::new();
+    let mut locks = lock(LOCKS.get_or_init(Default::default));
+    Arc::clone(locks.entry(filename).or_default())
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {

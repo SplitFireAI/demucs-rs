@@ -20,7 +20,7 @@ uniffi = "=0.31.0"
 thiserror = "2"
 pollster = "0.4"
 futures-channel = "0.3"
-ureq = { version = "2", default-features = false, features = ["native-tls", "gzip"] }
+ureq = { version = "2", default-features = false, features = ["native-tls"] }
 dirs = "5"
 
 # burn's `metal` feature turns on cubecl-wgpu's MSL codegen, which cubecl-wgpu
