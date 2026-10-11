@@ -177,6 +177,15 @@ Tools:
 One separation runs at a time; a second concurrent call returns a "busy" error.
 The last loaded model is kept in memory, so repeated calls skip weight loading and GPU init.
 
+### Embedding the server in another binary
+
+The protocol lives in the `demucs-mcp` crate, behind a `StemEngine` trait (`list_models` and
+`separate`), so a binary with its own separation engine can serve the same tools. `demucs --mcp`
+is one implementation; the SplitFire AI Audio Separator's `--mcp` mode is another, on its own
+model cache and storage. `demucs_mcp::serve(engine)` runs on stdin and stdout. The server checks
+that `input` is an absolute existing file and that `output_dir`, when given, is absolute; the
+engine decides the default output folder.
+
 ## Development Setup
 
 ### Prerequisites
