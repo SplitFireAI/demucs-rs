@@ -2229,9 +2229,11 @@ dependencies = [
  "clap",
  "cubecl",
  "demucs-core",
+ "demucs-mcp",
  "hound",
  "indicatif",
  "pollster",
+ "serde_json",
  "symphonia",
  "ureq",
 ]
@@ -2263,6 +2265,15 @@ dependencies = [
  "thiserror 2.0.18",
  "uniffi",
  "ureq",
+]
+
+[[package]]
+name = "demucs-mcp"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
